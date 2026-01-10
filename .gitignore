@@ -1,0 +1,11 @@
+# 忽略后端依赖
+target/
+*.class
+
+# 忽略前端依赖
+node_modules/
+dist/
+
+# 忽略本地IDE配置
+.idea/
+.vscode/
