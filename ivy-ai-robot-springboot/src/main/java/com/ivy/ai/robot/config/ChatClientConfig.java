@@ -33,7 +33,7 @@ public class ChatClientConfig {
     @Bean
     public ChatClient chatClient(DeepSeekChatModel deepSeekChatModel) {
         return ChatClient.builder(deepSeekChatModel)
-                .defaultSystem("你是一名教育网站的客服人员，你需要扮演好客服的角色")
+                .defaultSystem("你是一名购物网站的售后的客服人员，你需要扮演好客服的角色")
                 // Spring AI 内置的日志记录功能，解决流式对话的日志记录
                 .defaultAdvisors(new SimpleLoggerAdvisor(),
                         new MyLoggerAdvisor(),
