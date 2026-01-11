@@ -4,6 +4,7 @@ import jakarta.annotation.Resource;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.memory.repository.cassandra.CassandraChatMemoryRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,9 +21,12 @@ public class ChatMemoryConfig {
     * @Description:  记忆存储
     * @Author: Ivy
     */
+//    @Resource
+//    private ChatMemoryRepository chatMemoryRepository;
     @Resource
-    private ChatMemoryRepository chatMemoryRepository;
-    
+    private CassandraChatMemoryRepository chatMemoryRepository;
+
+
     /**
     * @Description: 初始化一个 ChatMemory 实例，并注入到 Spring 容器中
     * @Author: Ivy
