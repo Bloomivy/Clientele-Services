@@ -9,3 +9,9 @@ dist/
 # 忽略本地IDE配置
 .idea/
 .vscode/
+
+
+/ivy-ai-robot-springboot/src/test/
+/ivy-ai-robot-springboot/src/main/resources/
+!/ivy-ai-robot-springboot/target/
+!/.idea/

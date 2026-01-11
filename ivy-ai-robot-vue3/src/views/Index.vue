@@ -119,7 +119,8 @@ const sendMessage = async () => {
 
   try {
     // 建立 SSE 连接
-    eventSource = new EventSource(`http://localhost:8080/v6/ai/generateStream?message=${encodeURIComponent(userMessage)}`)
+    // eventSource = new EventSource(`http://localhost:8080/v6/ai/generateStream?message=${encodeURIComponent(userMessage)}`)
+    eventSource = new EventSource(`http://localhost:8080/v7/ai/generateStream?message=${encodeURIComponent(userMessage)}&lang=Java`)
     // 响应的回答
     let responseText = ''
 
