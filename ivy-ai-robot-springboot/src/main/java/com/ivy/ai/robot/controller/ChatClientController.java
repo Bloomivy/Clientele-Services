@@ -1,5 +1,7 @@
 package com.ivy.ai.robot.controller;
 
+import com.ivy.ai.robot.tools.DateTimeTools;
+import com.ivy.ai.robot.tools.WeatherTools;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -51,6 +53,8 @@ public class ChatClientController {
     public Flux<String> generateString(@RequestParam(value = "message", defaultValue = "你是谁？") String message, @RequestParam(value = "chatId") String chatId) {
 
         return chatClient.prompt()
+                .tools(new DateTimeTools(), new WeatherTools())
+//                .system("")
                 .user(message)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatId))
                 .stream()
