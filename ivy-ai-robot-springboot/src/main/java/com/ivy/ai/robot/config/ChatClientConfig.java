@@ -1,12 +1,11 @@
 package com.ivy.ai.robot.config;
 
-import com.ivy.ai.robot.advisor.MyLoggerAdvisor;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.deepseek.DeepSeekChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,14 +31,9 @@ public class ChatClientConfig {
     * @Date: 2025/5/28
     */
     @Bean
-    public ChatClient chatClient(DeepSeekChatModel deepSeekChatModel, ToolCallbackProvider tools) {
-        return ChatClient.builder(deepSeekChatModel)
-                .defaultToolCallbacks(tools) // MCP
-//                .defaultSystem("你是一名购物网站的售后的客服人员，你需要扮演好客服的角色")
-                // Spring AI 内置的日志记录功能，解决流式对话的日志记录
-                .defaultAdvisors(new SimpleLoggerAdvisor(),
-                        new MyLoggerAdvisor(),
-                        MessageChatMemoryAdvisor.builder(chatMemory).build())
+    public ChatClient chatClient(OpenAiChatModel chatModel) {
+        return ChatClient.builder(chatModel)
                 .build();
     }
+
 }
