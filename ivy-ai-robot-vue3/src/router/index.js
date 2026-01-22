@@ -1,12 +1,21 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 
 // 统一在这里声明所有路由
 const routes = [
     {
         path: '/', // 路由地址
+        name: 'Index', // 命名路由
         component: () => import('@/views/Index.vue'), // 对应组件
         meta: { // meta 信息
-            title: ' AI 客服聊天页' // 页面标题
+            title: 'AI 机器人首页' // 页面标题
+        }
+    },
+    {
+        path: '/chat/:chatId', // 路由地址
+        name: 'ChatPage', // 命名路由
+        component: () => import('@/views/ChatPage.vue'), // 对应组件
+        meta: { // meta 信息
+            title: '对话聊天页' // 页面标题
         }
     }
 ]
