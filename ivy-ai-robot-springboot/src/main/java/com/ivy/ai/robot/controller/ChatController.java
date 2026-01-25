@@ -3,10 +3,12 @@ package com.ivy.ai.robot.controller;
 import com.google.common.collect.Lists;
 import com.ivy.ai.robot.advisor.CustomChatMemoryAdvisor;
 import com.ivy.ai.robot.advisor.CustomStreamLoggerAndMessage2DBAdvisor;
+import com.ivy.ai.robot.advisor.CustomerServiceAdvisor;
 import com.ivy.ai.robot.advisor.NetworkSearchAdvisor;
 import com.ivy.ai.robot.aspect.ApiOperationLog;
 import com.ivy.ai.robot.domain.mapper.ChatMessageMapper;
 import com.ivy.ai.robot.model.vo.chat.*;
+import com.ivy.ai.robot.model.vo.customerService.AiCustomerServiceChatReqVO;
 import com.ivy.ai.robot.service.ChatService;
 import com.ivy.ai.robot.service.SearXNGService;
 import com.ivy.ai.robot.service.SearchResultContentFetcherService;
@@ -20,14 +22,12 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -43,19 +43,12 @@ import java.util.List;
 @Slf4j
 public class ChatController {
 
+    @Resource
+    private ChatService chatService;
     @Value("${spring.ai.openai.base-url}")
     private String baseUrl;
     @Value("${spring.ai.openai.api-key}")
     private String apiKey;
-
-    @Resource
-    private ChatService chatService;
-
-    @PostMapping("/new")
-    @ApiOperationLog(description = "新建对话")
-    public Response<?> newChat(@RequestBody @Validated NewChatReqVO newChatReqVO) {
-        return chatService.newChat(newChatReqVO);
-    }
 
     @Resource
     private ChatMessageMapper chatMessageMapper;
@@ -65,6 +58,13 @@ public class ChatController {
     private SearXNGService searXNGService;
     @Resource
     private SearchResultContentFetcherService searchResultContentFetcherService;
+
+
+    @PostMapping("/new")
+    @ApiOperationLog(description = "新建对话")
+    public Response<?> newChat(@RequestBody @Validated NewChatReqVO newChatReqVO) {
+        return chatService.newChat(newChatReqVO);
+    }
 
     @PostMapping(value = "/completion", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ApiOperationLog(description = "流式对话")
@@ -146,5 +146,8 @@ public class ChatController {
     public Response<?> deleteChat(@RequestBody @Validated DeleteChatReqVO deleteChatReqVO) {
         return chatService.deleteChat(deleteChatReqVO);
     }
+
+
+
 
 }
