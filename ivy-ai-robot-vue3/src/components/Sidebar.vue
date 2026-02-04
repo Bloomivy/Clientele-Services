@@ -17,6 +17,14 @@
         开启新对话
       </button>
 
+      <!-- 其他工具入口 -->
+      <ul class="px-3 text-gray-600 mb-2">
+        <li class="flex items-center py-1 px-2 hover:bg-gray-100 rounded-lg cursor-pointer" @click="jumpToCustomerServiceChatPage">
+          <SvgIcon name="customer-service" customCss="w-5 h-5 mr-2 inline mb-0" />
+          <span>智能客服</span>
+        </li>
+      </ul>
+
       <!-- 历史对话区域 -->
       <div class="my-4 px-2 overflow-y-auto overflow-x-hidden flex-1" ref="historyChatContainerRef">
         <div class="space-y-1">
@@ -127,6 +135,11 @@ const route = useRoute()
 const props = defineProps({
   sidebarOpen: { type: Boolean, required: true }, // 左边栏是否展开
 })
+
+// 跳转智能客服聊天页
+const jumpToCustomerServiceChatPage = () => {
+  router.push({ name: 'CustomerServiceChatPage'})
+}
 
 // 定义emits
 const emit = defineEmits(['toggle-sidebar'])

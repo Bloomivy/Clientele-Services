@@ -2,7 +2,7 @@
   <div :class="containerClass">
 
     <div class="bg-gray-100 rounded-3xl px-4 py-3 mx-4 border border-gray-200 flex flex-col">
-        <textarea placeholder="给 AI 机器人发送消息"
+        <textarea :placeholder="props.placeholder"
             class="bg-transparent border-none outline-none w-full text-sm resize-none min-h-[24px]" rows="2"
             v-model="userMessage"
             @input="autoResize"
@@ -15,7 +15,7 @@
             <!-- 左侧 -->
             <div class="flex gap-2 relative" ref="leftContainerRef">
                 <!-- 大模型下拉框 -->
-                <div class="border border-gray-300 px-2 py-1 rounded-3xl flex items-center justify-center hover:bg-gray-200 cursor-pointer"
+                <div v-show="props.showModelDropdown" class="border border-gray-300 px-2 py-1 rounded-3xl flex items-center justify-center hover:bg-gray-200 cursor-pointer"
                 ref="selectRef"
                 @click="toggleModelDropdown">
                     <SvgIcon :name="currSelectedModel.icon" customCss="w-5 h-5 mr-1.5" />
@@ -44,7 +44,7 @@
                 </div>
                 
                 <!-- 联网搜索 -->
-                <div class="ml-3 border px-2 py-1 rounded-3xl flex items-center justify-center cursor-pointer"
+                <div v-show="props.showNetworkSearch" class="ml-3 border px-2 py-1 rounded-3xl flex items-center justify-center cursor-pointer"
                 :class="isNetworkSearchSelected ? 'border-[#ceddee] bg-[#DBEAFE] hover:bg-[#C3DAF8]' : 'border-gray-300 hover:bg-gray-200'" 
                 @click="toggleNetworkSearch">
                     <SvgIcon name="network" customCss="w-5 h-5 mr-1.5" :class="isNetworkSearchSelected ? 'text-[#4D6BFE]' : 'text-gray-500'" />
@@ -94,6 +94,18 @@ const props = defineProps({
   containerClass: { // 自定义根容器样式
     type: String,
     default: ''
+  },
+  placeholder: { // 设置 textarea placeholder 提示
+    type: String,
+    default: '给小哈 AI 机器人发送消息'
+  },
+  showModelDropdown: { // 展示模型下拉选择 select
+    type: Boolean,
+    default: true
+  },
+  showNetworkSearch: { // 展示联网搜索
+    type: Boolean,
+    default: true
   },
 })
 
