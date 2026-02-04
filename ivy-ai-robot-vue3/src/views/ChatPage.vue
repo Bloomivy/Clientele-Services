@@ -25,6 +25,17 @@
               <!-- 回复的内容 -->
               <div class="p-1 mb-2 max-w-[90%]">
                 <LoadingDots v-if="chat.loading" />
+
+                <!-- 推理过程展示 -->
+               <div v-if="chat.reasoning" class=" text-gray-500 mb-5">
+                  <div class="mb-1 flex items-center cursor-pointer" @click="toggleReasoning(chat)">
+                    深度思考
+                    <SvgIcon name="down-arrow" :customCss="`w-5 h-5 inline ${chat.collapsedReasoning ? 'rotate-180' : ''}`"></SvgIcon>
+                  </div>
+                  <StreamMarkdownRender v-if="!chat.collapsedReasoning" customCss="px-2 border-l-2 border-gray-200 text-gray-500!" :content="chat.reasoning" />
+                </div>
+
+                <!-- 正式回答 -->
                 <StreamMarkdownRender :content="chat.content" />
               </div>
             </div>
@@ -118,7 +129,7 @@ onMounted(() => {
 // 当前页码（默认第一页）
 const current = ref(1)
 // 每页展示数据量
-const size = ref(3)
+const size = ref(10)
 // 是否还有下一页数据（默认有）
 const hasMore = ref(true)
 // 是否正在加载中 (解决并发请求后续页数据问题)
@@ -175,7 +186,7 @@ const sendMessage = async (payload) => {
   message.value = ''
 
   // 添加一个占位的回复消息
-  chatList.value.push({ role: 'assistant', content: '', loading: true})
+  chatList.value.push({ role: 'assistant', content: '', reasoning: '', loading: true})
 
   try {
     // 构建请求体
@@ -188,6 +199,8 @@ const sendMessage = async (payload) => {
 
     // 响应的回答
     let responseText = ''
+    // 推理过程文本
+    let reasoningText = ''
     // 获取最后一条消息
     const lastMessage = chatList.value[chatList.value.length - 1]
 
@@ -209,11 +222,19 @@ const sendMessage = async (payload) => {
           }
           // 解析 JSON
           let parseJson = JSON.parse(msg.data)
-          // 持续追加流式回答
-          responseText += parseJson.v
 
-          // 更新最后一条消息
-          chatList.value[chatList.value.length - 1].content = responseText
+          // 处理推理过程
+          if (parseJson.reasoning) {
+            reasoningText += parseJson.reasoning
+            lastMessage.reasoning = reasoningText
+          }
+
+          // 处理正常回复
+          if (parseJson.v) {
+            responseText += parseJson.v
+            lastMessage.content = responseText
+          }
+
           // 滚动到底部
           scrollToBottom()
         }
@@ -324,6 +345,12 @@ const loadMoreHistoryMessages = () => {
     // 恢复页码
     current.value = currentTemp
   }
+}
+
+
+// 切换推理内容的折叠状态
+const toggleReasoning = (chat) => {
+  chat.collapsedReasoning = !chat.collapsedReasoning
 }
 </script>
 

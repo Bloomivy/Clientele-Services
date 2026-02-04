@@ -19,4 +19,7 @@ public class AIResponse {
 
     // 流式响应内容
     private String v;
+
+    // 推理过程
+    private String reasoning;
 }
