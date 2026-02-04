@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -190,8 +191,19 @@ public class CustomerServiceImpl implements CustomerService {
         Long current = findMarkdownFilePageListReqVO.getCurrent();
         Long size = findMarkdownFilePageListReqVO.getSize();
 
+        String fileName = findMarkdownFilePageListReqVO.getFileName();
+        // 起始结束日期
+        LocalDate startDate = findMarkdownFilePageListReqVO.getStartDate();
+        LocalDate endDate = findMarkdownFilePageListReqVO.getEndDate();
+
+        // 结束日期加一天，确保结束日期包含当天数据
+        if (Objects.nonNull(endDate)) {
+            endDate = endDate.plusDays(1);
+        }
+
         // 执行分页查询
-        Page<AiCustomerServiceMdStorageDO> mdStorageDOPage = aiCustomerServiceMdStorageMapper.selectPageList(current, size);
+        Page<AiCustomerServiceMdStorageDO> mdStorageDOPage = aiCustomerServiceMdStorageMapper
+                .selectPageList(current, size, fileName, startDate, endDate);
 
         List<AiCustomerServiceMdStorageDO> mdStorageDOS = mdStorageDOPage.getRecords();
         // DO 转 VO

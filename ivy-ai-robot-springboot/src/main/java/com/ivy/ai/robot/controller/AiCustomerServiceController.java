@@ -94,9 +94,10 @@ public class AiCustomerServiceController {
      * 流式对话
      * @return
      */
-    @GetMapping(value = "/chat/completion", produces = "text/html;charset=utf-8")
+    @PostMapping(value = "/completion", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ApiOperationLog(description = "AI 智能客服对话")
-    public Flux<String> chat(@RequestParam(value = "message") String userMessage) {
+    public Flux<AIResponse> chat(@RequestBody @Validated AiCustomerServiceChatReqVO chatReqVO) {
+        String userMessage = chatReqVO.getMessage();
         // 构建 ChatModel
         ChatModel chatModel = OpenAiChatModel.builder()
                 .openAiApi(OpenAiApi.builder()
@@ -121,10 +122,10 @@ public class AiCustomerServiceController {
         // 应用 Advisor 集合
         chatClientRequestSpec.advisors(advisors);
 
-        // 流式输出
         return chatClientRequestSpec
                 .stream()
-                .content();
+                .content()
+                .mapNotNull(text -> AIResponse.builder().v(text).build()); // 构建返参 AIResponse
     }
 
 
