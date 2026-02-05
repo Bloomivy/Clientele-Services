@@ -4,12 +4,16 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.unit.DataSizeUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.google.common.collect.Maps;
-import com.ivy.ai.robot.domain.dos.AiCustomerServiceMdStorageDO;
-import com.ivy.ai.robot.domain.mapper.AiCustomerServiceMdStorageMapper;
-import com.ivy.ai.robot.enums.AiCustomerServiceMdStatusEnum;
+import com.ivy.ai.robot.domain.dos.AiCustomerServiceFileStorageDO;
+import com.ivy.ai.robot.domain.dos.FileChunkInfoDO;
+import com.ivy.ai.robot.domain.mapper.AiCustomerServiceFileStorageMapper;
+import com.ivy.ai.robot.domain.mapper.FileChunkInfoMapper;
+import com.ivy.ai.robot.enums.AiCustomerServiceFileStatusEnum;
 import com.ivy.ai.robot.enums.ResponseCodeEnum;
 import com.ivy.ai.robot.event.AiCustomerServiceMdUploadedEvent;
 import com.ivy.ai.robot.exception.BizException;
+import com.ivy.ai.robot.model.vo.chat.CheckFileReqVO;
+import com.ivy.ai.robot.model.vo.chat.CheckFileRspVO;
 import com.ivy.ai.robot.model.vo.customerService.DeleteMarkdownFileReqVO;
 import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListReqVO;
 import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListRspVO;
@@ -53,87 +57,89 @@ public class CustomerServiceImpl implements CustomerService {
     private String mdStoragePath;
 
     @Resource
-    private AiCustomerServiceMdStorageMapper aiCustomerServiceMdStorageMapper;
-    // 注入事件发布器
+    private AiCustomerServiceFileStorageMapper aiCustomerServiceFileStorageMapper;
     @Resource
-    private ApplicationEventPublisher eventPublisher;
+    private ApplicationEventPublisher eventPublisher; // 注入事件发布器
     @Resource
     private VectorStore vectorStore;
-
-    /**
-     * 上传 Markdown 问答文件
-     *
-     * @param file
-     * @return
-     */
-    @Override
-    public Response<?> uploadMarkdownFile(MultipartFile file) {
-        // 校验文件不能为空
-        if (file == null || file.isEmpty()) {
-            throw new BizException(ResponseCodeEnum.UPLOAD_FILE_CANT_EMPTY);
-        }
-
-        // 获取原始文件名（去除空格）
-        String originalFilename = StringUtils.trimToEmpty(file.getOriginalFilename());
-
-        // 验证文件类型，仅支持 Markdown
-        if (StringUtils.isBlank(originalFilename) || !isMarkdownFile(originalFilename)) {
-            throw new BizException(ResponseCodeEnum.ONLY_SUPPORT_MARKDOWN);
-        }
-
-        try {
-            // 重新生成文件名 (防止文件名冲突导致覆盖)
-            String newFilename = UUID.randomUUID().toString() + "-" + originalFilename;
-
-            // 构建存储路径
-            Path storageDirectory = Paths.get(mdStoragePath);
-            Path targetPath = storageDirectory.resolve(newFilename);
-
-            // 确保目录存在
-            Files.createDirectories(storageDirectory);
-
-            // 保存文件
-            file.transferTo(targetPath.toFile());
-
-            // 记录操作日志
-            log.info("## Markdown 问答文件存储成功, 文件名：{} -> 存储路径：{}", originalFilename, targetPath);
-
-            // 存储入库
-            AiCustomerServiceMdStorageDO aiCustomerServiceMdStorageDO = AiCustomerServiceMdStorageDO.builder()
-                    .originalFileName(originalFilename)
-                    .newFileName(newFilename)
-                    .filePath(targetPath.toString())
-                    .fileSize(file.getSize())
-                    .status(AiCustomerServiceMdStatusEnum.PENDING.getCode())
-                    .createTime(LocalDateTime.now())
-                    .updateTime(LocalDateTime.now())
-                    .build();
-
-            aiCustomerServiceMdStorageMapper.insert(aiCustomerServiceMdStorageDO);
-
-            // 获取主键 ID
-            Long id =  aiCustomerServiceMdStorageDO.getId();
-
-            // 元数据
-            Map<String, Object> metadatas = Maps.newHashMap();
-            metadatas.put("mdStorageId", id); // 关联的文件存储表主键 ID
-            metadatas.put("originalFileName", originalFilename); // 文件原始名称
-
-            // 发布事件
-            eventPublisher.publishEvent(AiCustomerServiceMdUploadedEvent.builder()
-                    .id(id)
-                    .filePath(targetPath.toString())
-                    .metadatas(metadatas)
-                    .build());
+    @Resource
+    private FileChunkInfoMapper fileChunkInfoMapper;
 
 
-            return Response.success();
+//    /**
+//     * 上传 Markdown 问答文件
+//     *
+//     * @param file
+//     * @return
+//     */
+//    @Override
+//    public Response<?> uploadMarkdownFile(MultipartFile file) {
+//        // 校验文件不能为空
+//        if (file == null || file.isEmpty()) {
+//            throw new BizException(ResponseCodeEnum.UPLOAD_FILE_CANT_EMPTY);
+//        }
+//
+//        // 获取原始文件名（去除空格）
+//        String originalFilename = StringUtils.trimToEmpty(file.getOriginalFilename());
+//
+//        // 验证文件类型，仅支持 Markdown
+//        if (StringUtils.isBlank(originalFilename) || !isMarkdownFile(originalFilename)) {
+//            throw new BizException(ResponseCodeEnum.ONLY_SUPPORT_MARKDOWN);
+//        }
+//
+//        try {
+//            // 重新生成文件名 (防止文件名冲突导致覆盖)
+//            String newFilename = UUID.randomUUID().toString() + "-" + originalFilename;
+//
+//            // 构建存储路径
+//            Path storageDirectory = Paths.get(mdStoragePath);
+//            Path targetPath = storageDirectory.resolve(newFilename);
+//
+//            // 确保目录存在
+//            Files.createDirectories(storageDirectory);
+//
+//            // 保存文件
+//            file.transferTo(targetPath.toFile());
+//
+//            // 记录操作日志
+//            log.info("## Markdown 问答文件存储成功, 文件名：{} -> 存储路径：{}", originalFilename, targetPath);
+//
+//            // 存储入库
+//            AiCustomerServiceFileStorageDO aiCustomerServiceFileStorageDO = AiCustomerServiceFileStorageDO.builder()
+//                    .originalFileName(originalFilename)
+//                    .newFileName(newFilename)
+//                    .filePath(targetPath.toString())
+//                    .fileSize(file.getSize())
+//                    .status(AiCustomerServiceMdStatusEnum.PENDING.getCode())
+//                    .createTime(LocalDateTime.now())
+//                    .updateTime(LocalDateTime.now())
+//                    .build();
+//
+//            aiCustomerServiceMdStorageMapper.insert(aiCustomerServiceFileStorageDO);
+//
+//            // 获取主键 ID
+//            Long id =  aiCustomerServiceFileStorageDO.getId();
+//
+//            // 元数据
+//            Map<String, Object> metadatas = Maps.newHashMap();
+//            metadatas.put("mdStorageId", id); // 关联的文件存储表主键 ID
+//            metadatas.put("originalFileName", originalFilename); // 文件原始名称
+//
+//            // 发布事件
+//            eventPublisher.publishEvent(AiCustomerServiceMdUploadedEvent.builder()
+//                            .id(id)
+//                            .filePath(targetPath.toString())
+//                            .metadatas(metadatas)
+//                            .build());
+//
+//            return Response.success();
+//
+//        } catch (IOException e) {
+//            log.error("## Markdown 问答文件上传失败：{}", originalFilename, e);
+//            throw new BizException(ResponseCodeEnum.UPLOAD_FILE_FAILED);
+//        }
+//    }
 
-        } catch (IOException e) {
-            log.error("## Markdown 问答文件上传失败：{}", originalFilename, e);
-            throw new BizException(ResponseCodeEnum.UPLOAD_FILE_FAILED);
-        }
-    }
 
     /**
      * 删除 Markdown 问答文件
@@ -148,28 +154,28 @@ public class CustomerServiceImpl implements CustomerService {
         Long id = deleteMarkdownFileReqVO.getId();
 
         // 查询该文件记录
-        AiCustomerServiceMdStorageDO aiCustomerServiceMdStorageDO = aiCustomerServiceMdStorageMapper.selectById(id);
+        AiCustomerServiceFileStorageDO aiCustomerServiceFileStorageDO = aiCustomerServiceFileStorageMapper.selectById(id);
 
         // 若记录不存在
-        if (Objects.isNull(aiCustomerServiceMdStorageDO)) {
+        if (Objects.isNull(aiCustomerServiceFileStorageDO)) {
             throw new BizException(ResponseCodeEnum.MARKDOWN_FILE_NOT_FOUND);
         }
 
         // 正在处理中的文件，无法删除
-        AiCustomerServiceMdStatusEnum statusEnum = AiCustomerServiceMdStatusEnum.codeOf(aiCustomerServiceMdStorageDO.getStatus());
-        if (Objects.equals(statusEnum, AiCustomerServiceMdStatusEnum.PENDING) // 待向量化
-                || Objects.equals(statusEnum, AiCustomerServiceMdStatusEnum.VECTORIZING)) { // 向量化中...
+        AiCustomerServiceFileStatusEnum statusEnum = AiCustomerServiceFileStatusEnum.codeOf(aiCustomerServiceFileStorageDO.getStatus());
+        if (Objects.equals(statusEnum, AiCustomerServiceFileStatusEnum.PENDING) // 待向量化
+                || Objects.equals(statusEnum, AiCustomerServiceFileStatusEnum.VECTORIZING)) { // 向量化中...
             throw new BizException(ResponseCodeEnum.MARKDOWN_FILE_CANT_DELETE);
         }
 
         // 删除文件表记录
-        aiCustomerServiceMdStorageMapper.deleteById(id);
+        aiCustomerServiceFileStorageMapper.deleteById(id);
 
         // 删除向量化数据
         vectorStore.delete(String.format("mdStorageId == %s", id));
 
         // 删除本地文件
-        String filePath = aiCustomerServiceMdStorageDO.getFilePath();
+        String filePath = aiCustomerServiceFileStorageDO.getFilePath();
         try {
             FileUtils.forceDelete(new File(filePath));
         } catch (IOException e) {
@@ -202,17 +208,17 @@ public class CustomerServiceImpl implements CustomerService {
         }
 
         // 执行分页查询
-        Page<AiCustomerServiceMdStorageDO> mdStorageDOPage = aiCustomerServiceMdStorageMapper
+        Page<AiCustomerServiceFileStorageDO> mdStorageDOPage = aiCustomerServiceFileStorageMapper
                 .selectPageList(current, size, fileName, startDate, endDate);
 
-        List<AiCustomerServiceMdStorageDO> mdStorageDOS = mdStorageDOPage.getRecords();
+        List<AiCustomerServiceFileStorageDO> mdStorageDOS = mdStorageDOPage.getRecords();
         // DO 转 VO
         List<FindMarkdownFilePageListRspVO> vos = null;
         if (CollUtil.isNotEmpty(mdStorageDOS)) {
             vos = mdStorageDOS.stream()
                     .map(mdStorageDO -> FindMarkdownFilePageListRspVO.builder() // 构建返参 VO 实体类
                             .id(mdStorageDO.getId())
-                            .originalFileName(mdStorageDO.getOriginalFileName())
+                            .originalFileName(mdStorageDO.getFileName())
                             .fileSize(DataSizeUtil.format(mdStorageDO.getFileSize())) // Hutool 工具库提供的字节转换
                             .status(mdStorageDO.getStatus())
                             .createTime(mdStorageDO.getCreateTime())
@@ -239,7 +245,7 @@ public class CustomerServiceImpl implements CustomerService {
         String remark = updateMarkdownFileReqVO.getRemark();
 
         // 根据 ID 修改备注信息
-        int count = aiCustomerServiceMdStorageMapper.updateById(AiCustomerServiceMdStorageDO.builder()
+        int count = aiCustomerServiceFileStorageMapper.updateById(AiCustomerServiceFileStorageDO.builder()
                 .id(id)
                 .remark(remark)
                 .updateTime(LocalDateTime.now())
@@ -251,6 +257,53 @@ public class CustomerServiceImpl implements CustomerService {
         }
 
         return Response.success();
+    }
+
+    /**
+     * 检查文件是否存在
+     *
+     * @param checkFileReqVO
+     * @return
+     */
+    @Override
+    public Response<CheckFileRspVO> checkFile(CheckFileReqVO checkFileReqVO) {
+        String fileMd5 = checkFileReqVO.getFileMd5();
+        // 查询对应 MD5 值的文件记录是否已经存在
+        AiCustomerServiceFileStorageDO fileStorageDO = aiCustomerServiceFileStorageMapper
+                .selectByMd5(fileMd5);
+
+        // 文件记录不存在，需要上传
+        if (Objects.isNull(fileStorageDO)) {
+            return Response.success(CheckFileRspVO.builder()
+                    .exists(false)
+                    .needUpload(true)
+                    .build());
+        }
+
+        // 若文件记录已存在
+        Integer status = fileStorageDO.getStatus();
+        AiCustomerServiceFileStatusEnum statusEnum = AiCustomerServiceFileStatusEnum.codeOf(status);
+
+        // 判断当前处理状态
+        // 文件已完整上传，支持秒传
+        if (!Objects.equals(statusEnum, AiCustomerServiceFileStatusEnum.UPLOADING)) {
+            return Response.success(CheckFileRspVO.builder()
+                    .exists(true)
+                    .needUpload(false)
+                    .build());
+        }
+
+        // 文件正在上传中，返回已上传的分片序号
+        List<FileChunkInfoDO> chunks = fileChunkInfoMapper.selecChunkedtList(fileMd5);
+        List<Integer> uploadedChunks = chunks.stream()
+                .map(FileChunkInfoDO::getChunkNumber)
+                .toList();
+
+        return Response.success(CheckFileRspVO.builder()
+                .exists(true)
+                .needUpload(true)
+                .uploadedChunks(uploadedChunks)
+                .build());
     }
 
     /**

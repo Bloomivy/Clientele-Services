@@ -1,8 +1,8 @@
 package com.ivy.ai.robot.event.listener;
 
-import com.ivy.ai.robot.domain.dos.AiCustomerServiceMdStorageDO;
-import com.ivy.ai.robot.domain.mapper.AiCustomerServiceMdStorageMapper;
-import com.ivy.ai.robot.enums.AiCustomerServiceMdStatusEnum;
+import com.ivy.ai.robot.domain.dos.AiCustomerServiceFileStorageDO;
+import com.ivy.ai.robot.domain.mapper.AiCustomerServiceFileStorageMapper;
+import com.ivy.ai.robot.enums.AiCustomerServiceFileStatusEnum;
 import com.ivy.ai.robot.event.AiCustomerServiceMdUploadedEvent;
 import com.ivy.ai.robot.reader.MarkdownReader;
 import lombok.extern.slf4j.Slf4j;
@@ -10,14 +10,10 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.context.event.EventListener;
 import org.springframework.core.io.FileSystemResource;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -40,7 +36,7 @@ public class AiCustomerServiceMdUploadedListener {
     @Resource
     private VectorStore vectorStore;
     @Resource
-    private AiCustomerServiceMdStorageMapper aiCustomerServiceMdStorageMapper;
+    private AiCustomerServiceFileStorageMapper aiCustomerServiceFileStorageMapper;
     @Resource
     private TransactionTemplate transactionTemplate;
 
@@ -61,9 +57,9 @@ public class AiCustomerServiceMdUploadedListener {
         Map<String, Object> metadatas = event.getMetadatas();
 
         // 更新存储文件的处理状态为 “向量化中”
-        aiCustomerServiceMdStorageMapper.updateById(AiCustomerServiceMdStorageDO.builder()
+        aiCustomerServiceFileStorageMapper.updateById(AiCustomerServiceFileStorageDO.builder()
                 .id(id)
-                .status(AiCustomerServiceMdStatusEnum.VECTORIZING.getCode())
+                .status(AiCustomerServiceFileStatusEnum.VECTORIZING.getCode())
                 .updateTime(LocalDateTime.now())
                 .build());
 
@@ -96,9 +92,9 @@ public class AiCustomerServiceMdUploadedListener {
                 }
 
                 // 更新存储文件的处理状态为 “已完成”
-                aiCustomerServiceMdStorageMapper.updateById(AiCustomerServiceMdStorageDO.builder()
+                aiCustomerServiceFileStorageMapper.updateById(AiCustomerServiceFileStorageDO.builder()
                         .id(id)
-                        .status(AiCustomerServiceMdStatusEnum.COMPLETED.getCode())
+                        .status(AiCustomerServiceFileStatusEnum.COMPLETED.getCode())
                         .updateTime(LocalDateTime.now())
                         .build());
 
@@ -112,9 +108,9 @@ public class AiCustomerServiceMdUploadedListener {
 
         // 若事务执行失败，更新存储文件的处理状态为 “失败”
         if (!isSuccess) {
-            aiCustomerServiceMdStorageMapper.updateById(AiCustomerServiceMdStorageDO.builder()
+            aiCustomerServiceFileStorageMapper.updateById(AiCustomerServiceFileStorageDO.builder()
                     .id(id)
-                    .status(AiCustomerServiceMdStatusEnum.FAILED.getCode())
+                    .status(AiCustomerServiceFileStatusEnum.FAILED.getCode())
                     .updateTime(LocalDateTime.now())
                     .build());
         }

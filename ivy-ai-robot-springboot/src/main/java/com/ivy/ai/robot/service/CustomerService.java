@@ -1,6 +1,8 @@
 package com.ivy.ai.robot.service;
 
 
+import com.ivy.ai.robot.model.vo.chat.CheckFileReqVO;
+import com.ivy.ai.robot.model.vo.chat.CheckFileRspVO;
 import com.ivy.ai.robot.model.vo.customerService.DeleteMarkdownFileReqVO;
 import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListReqVO;
 import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListRspVO;
@@ -17,12 +19,12 @@ import org.springframework.web.multipart.MultipartFile;
  */
 public interface CustomerService {
 
-    /**
-     * 上传 Markdown 问答文件
-     * @param file
-     * @return
-     */
-    Response<?> uploadMarkdownFile(MultipartFile file);
+//    /**
+//     * 上传 Markdown 问答文件
+//     * @param file
+//     * @return
+//     */
+//    Response<?> uploadMarkdownFile(MultipartFile file);
 
     /**
      * 删除 Markdown 问答文件
@@ -45,5 +47,10 @@ public interface CustomerService {
      */
     Response<?> updateMarkdownFile(UpdateMarkdownFileReqVO updateMarkdownFileReqVO);
 
-
+    /**
+     * 检查文件是否存在
+     * @param checkFileReqVO
+     * @return
+     */
+    Response<CheckFileRspVO> checkFile(CheckFileReqVO checkFileReqVO);
 }
