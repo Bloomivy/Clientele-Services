@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @Author: Ivy
@@ -125,22 +126,25 @@ public class ChatController {
                 .stream()
                 .chatResponse()
                 .mapNotNull(chatResponse -> { // 构建返参 AIResponse
-                    // 获取 AI 回复的消息
-                    AssistantMessage message = chatResponse.getResult().getOutput();
+                    if (Objects.nonNull(chatResponse) && Objects.nonNull(chatResponse.getResult())) {
+                        // 获取 AI 回复的消息
+                        AssistantMessage message = chatResponse.getResult().getOutput();
 
-                    // 获取正式回答
-                    String text = message.getText();
+                        // 获取正式回答
+                        String text = message.getText();
 
-                    // 获取推理内容（如果存在）
-                    String reasoningContent = message.getMetadata().get("reasoningContent").toString();
+                        // 获取推理内容（如果存在）
+                        String reasoningContent = message.getMetadata().get("reasoningContent").toString();
 
-                    // 构建响应对象
-                    if (StringUtils.isNotBlank(reasoningContent)) {
-                        // 返回思考过程
-                        return AIResponse.builder().reasoning(reasoningContent).build();
+                        // 构建响应对象
+                        if (StringUtils.isNotBlank(reasoningContent)) {
+                            // 返回思考过程
+                            return AIResponse.builder().reasoning(reasoningContent).build();
+                        }
+
+                        return AIResponse.builder().v(text).build();
                     }
-
-                    return AIResponse.builder().v(text).build();
+                    return null;
                 });
     }
 

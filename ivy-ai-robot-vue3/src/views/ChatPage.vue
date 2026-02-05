@@ -214,6 +214,7 @@ const sendMessage = async (payload) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestBody),
+      openWhenHidden: true, // 保持连接在页面隐藏时也不关闭
       onmessage(msg) {
         if (msg.event === '') {
           // 收到第一条数据后设置 loading 为 false

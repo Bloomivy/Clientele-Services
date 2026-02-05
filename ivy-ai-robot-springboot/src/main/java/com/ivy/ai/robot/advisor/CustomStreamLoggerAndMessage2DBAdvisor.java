@@ -10,10 +10,12 @@ import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -65,24 +67,31 @@ public class CustomStreamLoggerAndMessage2DBAdvisor implements StreamAdvisor {
         // 返回处理后的流
         return chatClientResponseFlux
                 .doOnNext(response -> {
-                    // 获取 AI 回复的消息
-                    AssistantMessage message = response.chatResponse().getResult().getOutput();
 
-                    // 获取推理内容（如果存在）
-                    String reasoningChunk = message.getMetadata().get("reasoningContent").toString();
+                    // 获取响应
+                    ChatResponse chatResponse = response.chatResponse();
 
-                    // 逐块收集正式回答
-                    String chunk = message.getText();
+                    // 判空
+                    if (Objects.nonNull(chatResponse) && Objects.nonNull(chatResponse.getResult())) {
+                        // 获取 AI 回复的消息
+                        AssistantMessage message = chatResponse.getResult().getOutput();
 
-                    if (reasoningChunk != null) {
-                        log.info("## reasoning chunk: {}", reasoningChunk);
-                        fullReasoning.get().append(reasoningChunk);
-                    }
+                        // 获取推理内容（如果存在）
+                        String reasoningChunk = message.getMetadata().get("reasoningContent").toString();
 
-                    // 若 chunk 块不为空，则追加到 fullContent 中
-                    if (chunk != null) {
-                        log.info("## chunk: {}", chunk);
-                        fullContent.get().append(chunk);
+                        // 逐块收集正式回答
+                        String chunk = message.getText();
+
+                        if (reasoningChunk != null) {
+                            log.info("## reasoning chunk: {}", reasoningChunk);
+                            fullReasoning.get().append(reasoningChunk);
+                        }
+
+                        // 若 chunk 块不为空，则追加到 fullContent 中
+                        if (chunk != null) {
+                            log.info("## chunk: {}", chunk);
+                            fullContent.get().append(chunk);
+                        }
                     }
                 })
                 .doOnComplete(() -> {
