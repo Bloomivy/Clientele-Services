@@ -12,12 +12,8 @@ import com.ivy.ai.robot.enums.AiCustomerServiceFileStatusEnum;
 import com.ivy.ai.robot.enums.ResponseCodeEnum;
 import com.ivy.ai.robot.event.AiCustomerServiceMdUploadedEvent;
 import com.ivy.ai.robot.exception.BizException;
-import com.ivy.ai.robot.model.vo.chat.CheckFileReqVO;
-import com.ivy.ai.robot.model.vo.chat.CheckFileRspVO;
-import com.ivy.ai.robot.model.vo.customerService.DeleteMarkdownFileReqVO;
-import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListReqVO;
-import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListRspVO;
-import com.ivy.ai.robot.model.vo.customerService.UpdateMarkdownFileReqVO;
+import com.ivy.ai.robot.model.vo.chat.*;
+import com.ivy.ai.robot.model.vo.customerService.*;
 import com.ivy.ai.robot.service.CustomerService;
 import com.ivy.ai.robot.utils.PageResponse;
 import com.ivy.ai.robot.utils.Response;
@@ -26,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.util.Strings;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
@@ -33,8 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -53,8 +49,12 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CustomerServiceImpl implements CustomerService {
 
-    @Value("${customer-service.md-storage-path}")
-    private String mdStoragePath;
+//    @Value("${customer-service.md-storage-path}")
+//    private String mdStoragePath;
+    @Value("${customer-service.file-storage-path}")
+    private String fileStoragePath;
+    @Value("${customer-service.chunk-path}")
+    private String chunkPath;
 
     @Resource
     private AiCustomerServiceFileStorageMapper aiCustomerServiceFileStorageMapper;
@@ -170,6 +170,17 @@ public class CustomerServiceImpl implements CustomerService {
 
         // 删除文件表记录
         aiCustomerServiceFileStorageMapper.deleteById(id);
+
+        // 删除分片文件所在的目录和记录
+        String fileMd5 = aiCustomerServiceFileStorageDO.getFileMd5();
+        String chunkDir = chunkPath + File.separator + fileMd5;
+        try {
+            FileUtils.forceDelete(new File(chunkDir));
+        } catch (IOException e) {
+            log.error("## 删除分片文件失败: ", e);
+        }
+
+        fileChunkInfoMapper.deleteByMd5(fileMd5);
 
         // 删除向量化数据
         vectorStore.delete(String.format("mdStorageId == %s", id));
@@ -318,4 +329,185 @@ public class CustomerServiceImpl implements CustomerService {
         String extension = FilenameUtils.getExtension(filename);
         return StringUtils.equalsIgnoreCase(extension, "md");
     }
+
+    /**
+     * 文件分片上传
+     *
+     * @param uploadChunkReqVO
+     * @return
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Response<?> uploadChunk(UploadChunkReqVO uploadChunkReqVO) {
+        String fileMd5 = uploadChunkReqVO.getFileMd5();
+        Integer chunkNumber = uploadChunkReqVO.getChunkNumber();
+        MultipartFile chunk = uploadChunkReqVO.getChunk();
+
+        // 检查当前分片是否已上传
+        Long count = fileChunkInfoMapper.selectCountByMd5AndChunkNum(fileMd5, chunkNumber);
+        if (count > 0) {
+            log.info("## 分片已存在: fileMd5={}, chunkNumber={}", fileMd5, chunkNumber);
+            return Response.success();
+        }
+
+        // 创建分片目录（确保父目录也存在）
+        String chunkDir = chunkPath + File.separator + fileMd5;
+        File chunkDirFile = new File(chunkDir);
+        try {
+            FileUtils.forceMkdir(chunkDirFile);
+        } catch (IOException e) {
+            log.error("## 创建分片目录失败: {}", chunkDir);
+            throw new RuntimeException(e);
+        }
+
+        // 保存分片文件到本地
+        String chunkFileName = chunkNumber + ".chunk";
+        File chunkFile = new File(chunkDirFile, chunkFileName);
+        try {
+            chunk.transferTo(chunkFile);
+        } catch (IOException e) {
+            log.error("## 保存分片文件失败: {}", chunkFileName);
+            throw new RuntimeException(e);
+        }
+
+        // 保存分片记录
+        FileChunkInfoDO chunkInfo = FileChunkInfoDO.builder()
+                .fileMd5(fileMd5)
+                .chunkNumber(chunkNumber)
+                .chunkPath(chunkFile.getAbsolutePath()) // 分片文件存储路径
+                .chunkSize(chunk.getSize())
+                .build();
+        fileChunkInfoMapper.insert(chunkInfo);
+
+        // 查询当前 MD5 对应的文件是否存在
+        AiCustomerServiceFileStorageDO fileStorageDO = aiCustomerServiceFileStorageMapper.selectByMd5(fileMd5);
+
+        // 已上传的分片数，默认为 1
+        int uploadedChunks = 1;
+
+        // 若不存在，写入数据
+        if (Objects.isNull(fileStorageDO)) {
+            fileStorageDO = AiCustomerServiceFileStorageDO.builder()
+                    .fileMd5(fileMd5)
+                    .fileName(uploadChunkReqVO.getFileName())
+                    .fileSize(uploadChunkReqVO.getFileSize()) // 原始文件大小
+                    .totalChunks(uploadChunkReqVO.getTotalChunks())
+                    .uploadedChunks(uploadedChunks) // 默认已上传分片数为 1
+                    .status(AiCustomerServiceFileStatusEnum.UPLOADING.getCode()) // 状态：上传中...
+                    .filePath(Strings.EMPTY)
+                    .build();
+            aiCustomerServiceFileStorageMapper.insert(fileStorageDO);
+        } else { // 存在，则进行更新操作，将已上传分片数 +1
+            aiCustomerServiceFileStorageMapper.incrementUploadedChunks(fileStorageDO.getId());
+            uploadedChunks += fileStorageDO.getUploadedChunks();
+        }
+
+        log.info("## 分片上传成功: fileMd5={}, chunkNumber={}, progress={}/{}",
+                fileMd5, chunkNumber, uploadedChunks, fileStorageDO.getTotalChunks());
+
+        return Response.success();
+    }
+
+    /**
+     * 文件分片合并
+     *
+     * @param mergeChunkReqVO
+     * @return
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Response<?> mergeChunk(MergeChunkReqVO mergeChunkReqVO) {
+        String fileMd5 = mergeChunkReqVO.getFileMd5();
+
+        // 检查文件元记录是否存在
+        AiCustomerServiceFileStorageDO fileStorageDO = aiCustomerServiceFileStorageMapper.selectByMd5(fileMd5);
+
+        // 要合并的目标文件不存在
+        if (Objects.isNull(fileStorageDO)) {
+            throw new BizException(ResponseCodeEnum.MERGE_CHUNK_NOT_FOUND);
+        }
+
+        // 查询所有已上传分片
+        List<FileChunkInfoDO> chunks = fileChunkInfoMapper.selecChunkedtList(fileMd5);
+
+        // 若已上传分片数不等于总分片数，说明分片数不完整
+        if (chunks.size() != fileStorageDO.getTotalChunks()) {
+            throw new BizException(ResponseCodeEnum.CHUNK_NUM_NOT_COMPLETE);
+        }
+
+        // 创建文件目录
+        File uploadDir = new File(fileStoragePath);
+        try {
+            FileUtils.forceMkdir(uploadDir);
+        } catch (IOException e) {
+            log.error("## 创建文件合并目录失败: {}", uploadDir);
+            throw new RuntimeException(e);
+        }
+
+        // 合并文件的名称
+        String finalFileName = System.currentTimeMillis() + "_" + fileStorageDO.getFileName();
+        // 新建合并文件
+        File finalFile = new File(uploadDir, finalFileName);
+
+        // 合并分片
+        try (FileOutputStream fos = new FileOutputStream(finalFile);
+             BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+            for (FileChunkInfoDO chunkInfo : chunks) {
+                // 读取分片文件
+                File chunkFile = new File(chunkInfo.getChunkPath());
+                try (FileInputStream fis = new FileInputStream(chunkFile);
+                     BufferedInputStream bis = new BufferedInputStream(fis)) {
+
+                    // 分块读取（8kb 缓冲区），减少IO操作次数，同时避免一次性加载所有分片到内存，导致内存占满
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = bis.read(buffer)) != -1) {
+                        bos.write(buffer, 0, len);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("## 合并文件失败: ", e);
+            throw new RuntimeException(e);
+        }
+
+        // 更新文件信息
+        aiCustomerServiceFileStorageMapper.updateById(AiCustomerServiceFileStorageDO.builder()
+                .id(fileStorageDO.getId())
+                .status(AiCustomerServiceFileStatusEnum.PENDING.getCode()) // 合并完成，等待向量化
+                .filePath(finalFile.getAbsolutePath())
+                .build());
+
+        // 删除分片文件所在的目录和记录
+        String chunkDir = chunkPath + File.separator + fileMd5;
+        try {
+            FileUtils.forceDelete(new File(chunkDir));
+        } catch (IOException e) {
+            log.error("## 删除分片文件失败: ", e);
+            throw new RuntimeException(e);
+        }
+
+        fileChunkInfoMapper.deleteByMd5(fileMd5);
+
+        log.info("## 文件合并成功: fileMd5={}, filePath={}", fileMd5, finalFile.getAbsolutePath());
+
+        // 合并完成后，发布事件，进行向量化处理
+        // 获取主键 ID
+        Long id =  fileStorageDO.getId();
+
+        // 元数据
+        Map<String, Object> metadatas = Maps.newHashMap();
+        metadatas.put("mdStorageId", id); // 关联的文件存储表主键 ID
+        metadatas.put("originalFileName", fileStorageDO.getFileName()); // 文件原始名称
+
+        // 发布事件
+        eventPublisher.publishEvent(AiCustomerServiceMdUploadedEvent.builder()
+                .id(id)
+                .filePath(finalFile.getAbsolutePath())
+                .metadatas(metadatas)
+                .build());
+
+        return Response.success();
+    }
+
 }

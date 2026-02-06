@@ -24,4 +24,29 @@ public interface FileChunkInfoMapper extends BaseMapper<FileChunkInfoDO> {
                         .orderByAsc(FileChunkInfoDO::getChunkNumber)
         );
     }
+
+    /**
+     * 查询指定分片是否已被上传
+     * @param fileMd5
+     * @param chunkNum
+     * @return
+     */
+    default Long selectCountByMd5AndChunkNum(String fileMd5, Integer chunkNum) {
+        return selectCount(
+                Wrappers.<FileChunkInfoDO>lambdaQuery()
+                        .eq(FileChunkInfoDO::getFileMd5, fileMd5)
+                        .eq(FileChunkInfoDO::getChunkNumber, chunkNum)
+        );
+    }
+
+    /**
+     * 根据文件 MD5 删除记录
+     * @param fileMd5
+     * @return
+     */
+    default int deleteByMd5(String fileMd5) {
+        return delete(Wrappers.<FileChunkInfoDO>lambdaQuery()
+                .eq(FileChunkInfoDO::getFileMd5, fileMd5));
+    }
+
 }

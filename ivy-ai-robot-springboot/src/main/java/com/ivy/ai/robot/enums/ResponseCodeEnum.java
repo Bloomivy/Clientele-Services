@@ -27,7 +27,8 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
     UPLOAD_FILE_FAILED("20003", "文件上传失败"),
     MARKDOWN_FILE_NOT_FOUND("20004", "Markdown 问答文件不存在"),
     MARKDOWN_FILE_CANT_DELETE("20005", "正在处理中的 Markdown 问答文件，不允许删除"),
-
+    MERGE_CHUNK_NOT_FOUND("20006", "合并的分片文件不存在"),
+    CHUNK_NUM_NOT_COMPLETE("20007", "分片数量不完整"),
     ;
 
 

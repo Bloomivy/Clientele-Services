@@ -94,7 +94,7 @@
             ref="fileInput" 
             @change="handleFileSelect" 
             class="hidden"
-            accept=".md,.markdown,text/markdown"
+            accept=".md,.markdown,text/markdown,.mp4,.mov,.avi"
           />
 
           <a-table :dataSource="dataSource" :columns="columns" :pagination="pagination" @change="handleTableChange" :loading="loading">
@@ -108,10 +108,11 @@
               </template>
               <template v-else-if="column.key === 'status'">
                 <span>
-                  <a-tag color="default" v-if="record.status === 0">待处理</a-tag>
-                  <a-tag color="processing" v-else-if="record.status === 1">向量化中</a-tag>
-                  <a-tag color="success" v-else-if="record.status === 2">已完成</a-tag>
-                  <a-tag color="error" v-else-if="record.status === 3">失败</a-tag>
+                  <a-tag color="default" v-if="record.status === 0">上传中</a-tag>
+                  <a-tag color="processing" v-else-if="record.status === 1">待处理</a-tag>
+                  <a-tag color="processing" v-else-if="record.status === 2">向量化中</a-tag>
+                  <a-tag color="success" v-else-if="record.status === 3">已完成</a-tag>
+                  <a-tag color="error" v-else-if="record.status === 4">失败</a-tag>
                 </span>
               </template>
             </template>
@@ -184,6 +185,56 @@
           </a-form-item>
         </a-form>
       </a-modal>
+
+      <!-- 上传文件模态框 -->
+      <a-modal v-model:open="uploadFileInfoModelOpen" width="700px" :centered=true title="文件上传" :footer="null">
+        <div class="mt-5"></div>
+        <!-- 文件信息 -->
+        <a-descriptions :column="1">
+          <a-descriptions-item label="文件名">{{ selectedFile.name }}</a-descriptions-item>
+          <a-descriptions-item label="文件大小">{{ filesize(selectedFile.size) }}</a-descriptions-item>
+          <a-descriptions-item label="文件 MD5">
+            <a-tag v-if="fileMd5" color="blue">{{ fileMd5 }}</a-tag>
+            <div v-else>
+              <a-spin size="small" /> 计算中...
+            </div>
+          </a-descriptions-item>
+        </a-descriptions>
+
+        <!-- 上传进度 -->
+        <a-card v-if="uploading || uploadProgress > 0" size="small" title="上传进度">
+          <a-progress
+            :percent="uploadProgress"
+            :status="uploadStatus"
+            :stroke-color="{
+              '0%': '#108ee9',
+              '100%': '#87d068',
+            }"
+          />
+          <a-alert
+            :message="statusText"
+            :type="alertType"
+            show-icon
+            style="margin-top: 16px"
+          />
+        </a-card>
+        <div class="mt-5"></div>
+
+              <!-- 上传按钮 -->
+              <a-button
+                v-if="selectedFile && fileMd5"
+                type="primary"
+                size="large"
+                block
+                :loading="uploading"
+                @click="startUpload"
+              >
+                <template #icon>
+                  <upload-outlined />
+                </template>
+                {{ uploading ? '上传中...' : '开始上传' }}
+              </a-button>
+      </a-modal>
 </template>
 
 <script setup>
@@ -195,8 +246,10 @@ import ChatInputBox from '@/components/ChatInputBox.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { UploadOutlined, SearchOutlined, RedoOutlined } from '@ant-design/icons-vue'
-import { findMarkdownFilePageList, uploadMarkdownFile, deleteMarkdownFile, updateMarkdownFile } from '@/api/customerService'
+import { findMarkdownFilePageList, deleteMarkdownFile, updateMarkdownFile, uploadFileChunk, mergeFileChunk, checkFile } from '@/api/customerService'
 import { message } from 'ant-design-vue'
+import { filesize } from 'filesize'
+import SparkMD5 from 'spark-md5'
 
 console.log('首页传递过来的消息: ', history.state?.firstMessage)
 
@@ -441,33 +494,30 @@ const uploadBtnLoading = ref(false)
 // 处理文件选择
 const handleFileSelect = (event) => {
   const file = event.target.files[0]
+
+  console.log('上传文件')
+
+  // 保存上传的文件
+  selectedFile.value = file
+
   if (file) {
-    console.log('已选择 Markdown 文件:', file.name)
+    console.log('已选择文件:', file.name)
 
-    // 表单对象
-    let formData = new FormData()
-    // 添加 file 字段，并将文件传入 
-    formData.append('file', file)
+    // 重置上传进度相关状态
+    uploadProgress.value = 0
+    uploadStatus.value = 'active'
+    statusText.value = ''
+    uploading.value = false
 
-    // 显示上传按钮的 Loading 动画
-    uploadBtnLoading.value = true
+    // 展示上传文件模态框
+    uploadFileInfoModelOpen.value = true
 
-    uploadMarkdownFile(formData).then((res) => {
-        // 响参失败，提示错误消息
-        if (!res.data.success) {
-          message.warning(res.data.message)
-          return
-        }
-
-        message.success('上传成功')
-
-        // 重新渲染列表数据
-        renderTableData(1, pageSize.value)
-    }).finally(() => {
-      // 隐藏上传按钮的 Loading 动画
-      uploadBtnLoading.value = false
-    })
+    message.info('开始计算文件 MD5 值...')
+    calculateMD5(file)
   }
+  
+  // 清空 input 的值，确保下次选择相同文件时也能触发 change 事件
+  event.target.value = ''
 }
 
 // 是否展示 “删除 Markdown 文件” 确认框
@@ -554,6 +604,248 @@ const handleEditMarkdownModelOk = () => {
         renderTableData(current.value, pageSize.value)
   })
 }
+
+// 是否展示上传文件模态框
+const uploadFileInfoModelOpen = ref(false)
+// 上传的文件
+const selectedFile = ref(null)
+// 文件 MD5
+const fileMd5 = ref('')
+// 分片大小
+const CHUNK_SIZE = 2 * 1024 * 1024 // 2MB 每分片
+
+// 计算文件 MD5
+const calculateMD5 = (file) => {
+  // 创建 SparkMD5.ArrayBuffer 对象，用于计算 MD5
+  const spark = new SparkMD5.ArrayBuffer()
+
+  // 创建 FileReader 对象，用于读取文件
+  const fileReader = new FileReader()
+
+  // 计算分片数
+  const chunks = Math.ceil(file.size / CHUNK_SIZE)
+
+  // 当前读取的分片，从0开始
+  let currentChunk = 0
+  
+  // 设置 FileReader 的 onload 事件处理函数，当读取完一片数据时触发
+  fileReader.onload = (e) => {
+    // 将读取到的 ArrayBuffer 数据追加到 spark 对象中，用于计算 MD5
+    spark.append(e.target.result)
+    // 当前分片索引 +1
+    currentChunk++
+    
+    // 如果分片数还没读取完毕，继续读取下一片
+    if (currentChunk < chunks) {
+      loadNext()
+    } else { // 所有分片读取完毕后，计算最终的 MD5 并存储到 fileMd5 变量中
+      fileMd5.value = spark.end()
+      message.success('MD5计算完成')
+    }
+  }
+  
+  // 设置 FileReader 的 onerror 事件处理函数，当读取出错时触发
+  fileReader.onerror = () => {
+    message.error('MD5计算失败')
+  }
+  
+  // 定义 loadNext 方法，用于读取下一分片的数据
+  const loadNext = () => {
+    // 计算当前分片的起始位置
+    const start = currentChunk * CHUNK_SIZE
+    // 计算当前分片的结束位置（取最小值，避免最后一片超过文件大小）
+    const end = Math.min(start + CHUNK_SIZE, file.size)
+    // 读取当前分片的数据，读取结果为 ArrayBuffer
+    fileReader.readAsArrayBuffer(file.slice(start, end))
+  }
+  
+  // 开始读取第一分片的数据
+  loadNext()
+}
+
+// 是否正在上传中
+const uploading = ref(false)
+// 上传进度
+const uploadProgress = ref(0)
+// 展示状态进度信息
+const statusText = ref('')
+// 上传状态
+const uploadStatus = ref('active')
+
+
+// 计算提示类型
+const alertType = computed(() => {
+  // 错误状态
+  if (uploadStatus.value === 'exception') return 'error'
+  // 成功状态（只有明确标记为 success 才显示绿色）
+  if (uploadStatus.value === 'success') return 'success'
+  // 其他状态（上传中、合并中等）显示蓝色信息提示
+  return 'info'
+})
+
+// 开始上传
+const startUpload = async () => {
+  // 判断上传文件是否为空，以及 md5 是否计算完成
+  if (!selectedFile.value || !fileMd5.value) return
+  
+  uploading.value = true
+  uploadProgress.value = 0
+  uploadStatus.value = 'active'
+  
+  try {
+    // 计算总分片数
+    const totalChunks = Math.ceil(selectedFile.value.size / CHUNK_SIZE)
+    
+    // 1. 检查文件是否存在（秒传）
+    statusText.value = '检查文件是否已存在...'
+    const checkResponse = await checkFile(fileMd5.value)
+
+    // 秒传成功
+    if (checkResponse.data.success && checkResponse.data.data.exists && !checkResponse.data.data.needUpload) {
+      uploadProgress.value = 100
+      uploadStatus.value = 'success'
+      statusText.value = '文件已存在，秒传成功！'
+      uploading.value = false
+      return
+    }
+    
+    // 2. 上传分片
+    let uploadedChunks = []
+
+    // 断点续传
+    if (checkResponse.data.success && checkResponse.data.data.exists && checkResponse.data.data.needUpload) {
+      // 获取已上传的分片序号
+      uploadedChunks = checkResponse.data.data.uploadedChunks
+    }
+
+    statusText.value = `开始上传分片... (已上传: ${uploadedChunks.length}/${totalChunks})`
+
+    // 最大并发数，根据情况来调整
+    const MAX_CONCURRENT = 3
+    // 等待上传的分片队列
+    const uploadQueue = []
+
+    // 构建待上传的分片队列
+    for (let i = 0; i < totalChunks; i++) {
+      // 跳过已上传的分片
+      if (uploadedChunks.includes(i)) {
+        continue
+      }
+      uploadQueue.push(i)
+    }
+    
+    // 记录成功上传的分片索引
+    const successUploads = []
+    // 记录失败的分片索引
+    const failedUploads = [] 
+    // 最大重试次数
+    const MAX_RETRY = 3 
+    
+    // 定义异步上传分片方法（添加重试策略）
+    const uploadChunkWithRetry = async (chunkIndex, retryCount = 0) => {
+      try {
+          // 计算当前分片的开始位置
+          const start = chunkIndex * CHUNK_SIZE
+          // 计算当前分片的结束位置
+          const end = Math.min(start + CHUNK_SIZE, selectedFile.value.size)
+          // 从原始文件切割当前分片
+          const chunk = selectedFile.value.slice(start, end)
+          
+          // 构建表单对象
+          const formData = new FormData()
+          formData.append('chunk', chunk)
+          formData.append('fileMd5', fileMd5.value)
+          formData.append('fileName', selectedFile.value.name)
+          formData.append('fileSize', selectedFile.value.size)
+          formData.append('chunkNumber', chunkIndex)
+          formData.append('totalChunks', totalChunks)
+          
+          // 上传当前分片
+          const response = await uploadFileChunk(formData)
+
+          // 判断上传是否成功
+          if (!response.data.success) {
+            throw new Error(response.data.message || '分片上传失败')
+          }
+
+          console.log(`分片 ${chunkIndex} 上传成功`)
+
+          // 记录成功上传的分片
+          successUploads.push(chunkIndex)
+
+          // 计算当前上传进度
+          const uploadedCount = uploadedChunks.length + successUploads.length
+          uploadProgress.value = Math.floor((uploadedCount / totalChunks) * 100)
+          statusText.value = `上传中... ${uploadedCount}/${totalChunks} 分片`
+      } catch (error) {
+          // 如果上传失败, 且未达到最大重试次数，则重试
+          if (retryCount < MAX_RETRY) {
+            console.warn(`分片 ${chunkIndex} 上传失败，正在重试 (${retryCount + 1}/${MAX_RETRY})...`, error)
+            statusText.value = `分片 ${chunkIndex} 上传失败，正在重试 (${retryCount + 1}/${MAX_RETRY})...`
+
+            // 间隔一段时间后再重试（指数退避策略）
+            // 计算间隔时间
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 5000) // 最多等待 5 秒
+            console.warn(`重试等待 ${delay}ms ...`)
+            // 间隔一段时间
+            await new Promise(resolve => setTimeout(resolve, delay))
+            // 递归重试
+            return uploadChunkWithRetry(chunkIndex, retryCount + 1)
+
+          } else {
+            console.error(`分片 ${chunkIndex} 上传失败，已达到最大重试次数`, error)
+
+            // 保存当前上传失败的分片
+            failedUploads.push(chunkIndex)
+          }
+      } 
+    }
+
+    // 并发分批上传
+    for (let i = 0; i < uploadQueue.length; i += MAX_CONCURRENT) {
+      // 取出当前批次的分片索引
+      const batch = uploadQueue.slice(i, i + MAX_CONCURRENT)
+      // 并发上传当前批次的分片集合
+      await Promise.all(batch.map(chunkIndex => uploadChunkWithRetry(chunkIndex)))
+    }
+
+    // 打印上传结果统计
+    console.log(`=== 上传完成统计 ===`)
+    console.log(`成功上传: ${successUploads.length} 个分片`, successUploads)
+    console.log(`失败上传: ${failedUploads.length} 个分片`, failedUploads)
+    console.log(`总计应上传: ${uploadQueue.length} 个分片`)
+    
+    // 如果有失败的分片，抛出错误
+    if (failedUploads.length > 0) {
+      throw new Error(`有 ${failedUploads.length} 个分片上传失败: ${failedUploads.join(', ')}`)
+    }
+    
+    // 3. 合并分片
+    statusText.value = '正在合并文件...'
+    // 调用后端文件合并接口，设置超时时间为 2 分钟（120000 毫秒）
+    await mergeFileChunk(fileMd5.value, 120000)
+
+    // 设置上传进度为 100%
+    uploadProgress.value = 100
+    uploadStatus.value = 'success'
+    statusText.value = '上传完成！'
+    message.success('文件上传成功！')
+
+    // 重新渲染列表数据
+    renderTableData(1, pageSize.value)
+    
+  } catch (error) {
+    console.error('上传失败:', error)
+    uploadStatus.value = 'exception'
+    statusText.value = '上传失败: ' + (error.response?.data?.message || error.message)
+    message.error('上传失败: ' + (error.response?.data?.message || error.message))
+  } finally {
+    // 设置上传完毕
+    uploading.value = false
+  }
+}
+
+
 </script>
 
 <style scoped>

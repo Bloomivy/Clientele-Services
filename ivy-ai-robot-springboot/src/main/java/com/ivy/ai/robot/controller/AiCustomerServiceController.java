@@ -77,19 +77,19 @@ public class AiCustomerServiceController {
         return customerService.checkFile(checkFileReqVO);
     }
 
-    @PostMapping("/md/delete")
+    @PostMapping("/file/delete")
     @ApiOperationLog(description = "删除 Markdown 问答文件")
     public Response<?> deleteMarkdownFile(@RequestBody @Validated DeleteMarkdownFileReqVO deleteMarkdownFileReqVO) {
         return customerService.deleteMarkdownFile(deleteMarkdownFileReqVO);
     }
 
-    @PostMapping("/md/list")
+    @PostMapping("/file/list")
     @ApiOperationLog(description = "Markdown 问答文件分页查询")
     public PageResponse<FindMarkdownFilePageListRspVO> findMarkdownFilePageList(@RequestBody @Validated FindMarkdownFilePageListReqVO findMarkdownFilePageListReqVO) {
         return customerService.findMarkdownFilePageList(findMarkdownFilePageListReqVO);
     }
 
-    @PostMapping("/md/update")
+    @PostMapping("/file/update")
     @ApiOperationLog(description = "修改 Markdown 问答文件信息")
     public Response<?> updateMarkdownFile(@RequestBody @Validated UpdateMarkdownFileReqVO updateMarkdownFileReqVO) {
         return customerService.updateMarkdownFile(updateMarkdownFileReqVO);
@@ -134,6 +134,16 @@ public class AiCustomerServiceController {
                 .mapNotNull(text -> AIResponse.builder().v(text).build()); // 构建返参 AIResponse
     }
 
+    @PostMapping("/file/upload-chunk")
+//    @ApiOperationLog(description = "文件分片上传")
+    public Response<?> uploadChunk(@ModelAttribute UploadChunkReqVO uploadChunkReqVO) {
+        return customerService.uploadChunk(uploadChunkReqVO);
+    }
 
+    @PostMapping("/file/merge-chunk")
+    @ApiOperationLog(description = "文件分片合并")
+    public Response<?> mergeChunk(@RequestBody @Validated MergeChunkReqVO mergeChunkReqVO) {
+        return customerService.mergeChunk(mergeChunkReqVO);
+    }
 }
 

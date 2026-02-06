@@ -3,10 +3,7 @@ package com.ivy.ai.robot.service;
 
 import com.ivy.ai.robot.model.vo.chat.CheckFileReqVO;
 import com.ivy.ai.robot.model.vo.chat.CheckFileRspVO;
-import com.ivy.ai.robot.model.vo.customerService.DeleteMarkdownFileReqVO;
-import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListReqVO;
-import com.ivy.ai.robot.model.vo.customerService.FindMarkdownFilePageListRspVO;
-import com.ivy.ai.robot.model.vo.customerService.UpdateMarkdownFileReqVO;
+import com.ivy.ai.robot.model.vo.customerService.*;
 import com.ivy.ai.robot.utils.PageResponse;
 import com.ivy.ai.robot.utils.Response;
 import org.springframework.web.multipart.MultipartFile;
@@ -53,4 +50,18 @@ public interface CustomerService {
      * @return
      */
     Response<CheckFileRspVO> checkFile(CheckFileReqVO checkFileReqVO);
+
+    /**
+     * 文件分片上传
+     * @param uploadChunkReqVO
+     * @return
+     */
+    Response<?> uploadChunk(UploadChunkReqVO uploadChunkReqVO);
+
+    /**
+     * 文件分片合并
+     * @param mergeChunkReqVO
+     * @return
+     */
+    Response<?> mergeChunk(MergeChunkReqVO mergeChunkReqVO);
 }
